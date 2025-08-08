@@ -14,12 +14,20 @@ const MavireClaimPortal = () => {
   const [nftDetails, setNftDetails] = useState(null);
   const [copySuccess, setCopySuccess] = useState('');
 
-  // Get token from URL params on component mount
+  // API Base URL - Update this with your mavire-minting-api URL
+  const API_BASE = process.env.REACT_APP_API_URL || 'https://your-mavire-minting-api.vercel.app';
+
+  // Get token and email from URL params on component mount
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const token = urlParams.get('token');
+    const emailParam = urlParams.get('email');
+    
     if (token) {
       setClaimToken(token);
+    }
+    if (emailParam) {
+      setEmail(emailParam);
     }
   }, []);
 
@@ -43,8 +51,7 @@ const MavireClaimPortal = () => {
     setError('');
 
     try {
-      // Simulate API call - replace with actual API endpoint
-      const response = await fetch('/api/verify-claim', {
+      const response = await fetch(`${API_BASE}/api/verify-claim`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -55,15 +62,16 @@ const MavireClaimPortal = () => {
         })
       });
 
+      const data = await response.json();
+
       if (!response.ok) {
-        throw new Error('Invalid claim token or email');
+        throw new Error(data.error || 'Invalid claim token or email');
       }
 
-      const data = await response.json();
-      setOrderDetails(data.order);
+      setOrderDetails(data.order || data);
       setCurrentStep('confirmed');
     } catch (err) {
-      setError(err.message || 'Failed to verify claim');
+      setError(err.message || 'Failed to verify claim. Please check your email and claim token.');
     } finally {
       setLoading(false);
     }
@@ -74,8 +82,7 @@ const MavireClaimPortal = () => {
     setError('');
 
     try {
-      // Simulate NFT claiming process
-      const response = await fetch('/api/claim/process', {
+      const response = await fetch(`${API_BASE}/api/claim/process`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -86,16 +93,28 @@ const MavireClaimPortal = () => {
         })
       });
 
+      const data = await response.json();
+
       if (!response.ok) {
-        throw new Error('Failed to process NFT claim');
+        throw new Error(data.error || 'Failed to process NFT claim');
       }
 
-      const data = await response.json();
-      setWalletDetails(data.wallet);
-      setNftDetails(data.nft);
+      setWalletDetails(data.wallet || {
+        address: data.walletAddress,
+        privateKey: data.privateKey,
+        mnemonic: data.recoveryPhrase
+      });
+      
+      setNftDetails(data.nft || {
+        tokenId: data.nftTokenId,
+        transactionHash: data.transactionHash,
+        certificateId: data.nftTokenId,
+        contractAddress: data.nftContractAddress
+      });
+
       setCurrentStep('success');
     } catch (err) {
-      setError(err.message || 'Failed to claim NFT');
+      setError(err.message || 'Failed to claim NFT. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -107,6 +126,7 @@ const MavireClaimPortal = () => {
       privateKey: walletDetails.privateKey,
       mnemonic: walletDetails.mnemonic,
       network: 'Polygon',
+      nftDetails: nftDetails,
       createdAt: new Date().toISOString()
     };
 
@@ -196,19 +216,19 @@ const MavireClaimPortal = () => {
           <div className="grid grid-cols-2 gap-4 text-sm">
             <div>
               <span className="text-gray-500">Order Number:</span>
-              <p className="font-medium">#{orderDetails.orderNumber}</p>
+              <p className="font-medium">#{orderDetails.orderNumber || orderDetails.orderId || 'N/A'}</p>
             </div>
             <div>
               <span className="text-gray-500">Product:</span>
-              <p className="font-medium">{orderDetails.productName}</p>
+              <p className="font-medium">{orderDetails.productName || orderDetails.product || 'Mavire Product'}</p>
             </div>
             <div>
               <span className="text-gray-500">Customer:</span>
-              <p className="font-medium">{orderDetails.customerName}</p>
+              <p className="font-medium">{orderDetails.customerName || orderDetails.customer || email}</p>
             </div>
             <div>
               <span className="text-gray-500">Date:</span>
-              <p className="font-medium">{new Date(orderDetails.createdAt).toLocaleDateString()}</p>
+              <p className="font-medium">{orderDetails.createdAt ? new Date(orderDetails.createdAt).toLocaleDateString() : new Date().toLocaleDateString()}</p>
             </div>
           </div>
         </div>
@@ -217,11 +237,18 @@ const MavireClaimPortal = () => {
       <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
         <h4 className="font-medium text-purple-900 mb-2">What happens next?</h4>
         <ul className="text-sm text-purple-700 space-y-1">
-          <li>• A secure Ethereum wallet will be generated for you</li>
+          <li>• A secure Polygon wallet will be generated for you</li>
           <li>• Your NFT Certificate of Authenticity will be minted</li>
           <li>• You'll receive wallet credentials and NFT details</li>
         </ul>
       </div>
+
+      {error && (
+        <div className="flex items-center space-x-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+          <AlertCircle className="w-5 h-5 text-red-500" />
+          <span className="text-red-700">{error}</span>
+        </div>
+      )}
 
       <button
         onClick={handleClaimNFT}
