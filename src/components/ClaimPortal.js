@@ -9,26 +9,22 @@ const MavireClaimPortal = () => {
   const [error, setError] = useState('');
   const [orderDetails, setOrderDetails] = useState(null);
   const [walletDetails, setWalletDetails] = useState(null);
+  const [nftDetails, setNftDetails] = useState(null);
   const [showPrivateKey, setShowPrivateKey] = useState(false);
   const [showMnemonic, setShowMnemonic] = useState(false);
-  const [nftDetails, setNftDetails] = useState(null);
   const [copySuccess, setCopySuccess] = useState('');
 
-  // API Base URL - Update this with your mavire-minting-api URL
-  const API_BASE = process.env.REACT_APP_API_URL || 'https://your-mavire-minting-api.vercel.app';
+  // Use environment variable for API base URL
+  const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:3000';
 
   // Get token and email from URL params on component mount
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const token = urlParams.get('token');
-    const emailParam = urlParams.get('email');
-    
-    if (token) {
-      setClaimToken(token);
-    }
-    if (emailParam) {
-      setEmail(emailParam);
-    }
+    const email = urlParams.get('email');
+    if (token) setClaimToken(token);
+    if (email) setEmail(email);
+    console.log('API_BASE:', API_BASE); // Debug: Log API base URL
   }, []);
 
   const copyToClipboard = async (text, type) => {
@@ -38,6 +34,7 @@ const MavireClaimPortal = () => {
       setTimeout(() => setCopySuccess(''), 2000);
     } catch (err) {
       console.error('Failed to copy:', err);
+      setError('Failed to copy to clipboard');
     }
   };
 
@@ -49,29 +46,40 @@ const MavireClaimPortal = () => {
 
     setLoading(true);
     setError('');
+    const verifyUrl = `${API_BASE}/api/verify-claim`;
+    console.log('Fetching:', verifyUrl); // Debug: Log full URL
 
     try {
-      const response = await fetch(`${API_BASE}/api/verify-claim`, {
+      const response = await fetch(verifyUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           email,
-          claimToken
-        })
+          claimToken,
+        }),
       });
 
-      const data = await response.json();
-
       if (!response.ok) {
-        throw new Error(data.error || 'Invalid claim token or email');
+        throw new Error(`HTTP ${response.status}: Failed to verify claim`);
       }
 
-      setOrderDetails(data.order || data);
-      setCurrentStep('confirmed');
+      const data = await response.json();
+      if (data.orderId) {
+        setOrderDetails({
+          orderNumber: data.orderId,
+          productName: data.productName,
+          customerName: data.customerName,
+          createdAt: data.orderDate || new Date().toISOString(),
+        });
+        setCurrentStep('confirmed');
+      } else {
+        throw new Error(data.error || 'Invalid claim token or email');
+      }
     } catch (err) {
-      setError(err.message || 'Failed to verify claim. Please check your email and claim token.');
+      console.error('Verification error:', err);
+      setError(err.message || 'Failed to verify claim');
     } finally {
       setLoading(false);
     }
@@ -80,41 +88,45 @@ const MavireClaimPortal = () => {
   const handleClaimNFT = async () => {
     setLoading(true);
     setError('');
+    const claimUrl = `${API_BASE}/api/process`;
+    console.log('Fetching:', claimUrl); // Debug: Log full URL
 
     try {
-      const response = await fetch(`${API_BASE}/api/claim/process`, {
+      const response = await fetch(claimUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           email,
-          claimToken
-        })
+          claimToken,
+        }),
       });
-
-      const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || 'Failed to process NFT claim');
+        throw new Error(`HTTP ${response.status}: Failed to process NFT claim`);
       }
 
-      setWalletDetails(data.wallet || {
-        address: data.walletAddress,
-        privateKey: data.privateKey,
-        mnemonic: data.recoveryPhrase
-      });
-      
-      setNftDetails(data.nft || {
-        tokenId: data.nftTokenId,
-        transactionHash: data.transactionHash,
-        certificateId: data.nftTokenId,
-        contractAddress: data.nftContractAddress
-      });
-
-      setCurrentStep('success');
+      const data = await response.json();
+      if (data.walletAddress) {
+        setWalletDetails({
+          address: data.walletAddress,
+          privateKey: data.privateKey,
+          mnemonic: data.recoveryPhrase,
+        });
+        setNftDetails({
+          tokenId: data.nftTokenId,
+          transactionHash: data.transactionHash,
+          contractAddress: data.nftContractAddress,
+          certificateId: data.nftTokenId, // Map to certificateId for UI
+        });
+        setCurrentStep('success');
+      } else {
+        throw new Error(data.error || 'Failed to claim NFT');
+      }
     } catch (err) {
-      setError(err.message || 'Failed to claim NFT. Please try again.');
+      console.error('Claim error:', err);
+      setError(err.message || 'Failed to claim NFT');
     } finally {
       setLoading(false);
     }
@@ -126,12 +138,11 @@ const MavireClaimPortal = () => {
       privateKey: walletDetails.privateKey,
       mnemonic: walletDetails.mnemonic,
       network: 'Polygon',
-      nftDetails: nftDetails,
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
     };
 
     const dataStr = JSON.stringify(walletInfo, null, 2);
-    const dataBlob = new Blob([dataStr], {type: 'application/json'});
+    const dataBlob = new Blob([dataStr], { type: 'application/json' });
     const url = URL.createObjectURL(dataBlob);
     const link = document.createElement('a');
     link.href = url;
@@ -216,19 +227,19 @@ const MavireClaimPortal = () => {
           <div className="grid grid-cols-2 gap-4 text-sm">
             <div>
               <span className="text-gray-500">Order Number:</span>
-              <p className="font-medium">#{orderDetails.orderNumber || orderDetails.orderId || 'N/A'}</p>
+              <p className="font-medium">#{orderDetails.orderNumber}</p>
             </div>
             <div>
               <span className="text-gray-500">Product:</span>
-              <p className="font-medium">{orderDetails.productName || orderDetails.product || 'Mavire Product'}</p>
+              <p className="font-medium">{orderDetails.productName}</p>
             </div>
             <div>
               <span className="text-gray-500">Customer:</span>
-              <p className="font-medium">{orderDetails.customerName || orderDetails.customer || email}</p>
+              <p className="font-medium">{orderDetails.customerName}</p>
             </div>
             <div>
               <span className="text-gray-500">Date:</span>
-              <p className="font-medium">{orderDetails.createdAt ? new Date(orderDetails.createdAt).toLocaleDateString() : new Date().toLocaleDateString()}</p>
+              <p className="font-medium">{new Date(orderDetails.createdAt).toLocaleDateString()}</p>
             </div>
           </div>
         </div>
@@ -237,18 +248,11 @@ const MavireClaimPortal = () => {
       <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
         <h4 className="font-medium text-purple-900 mb-2">What happens next?</h4>
         <ul className="text-sm text-purple-700 space-y-1">
-          <li>• A secure Polygon wallet will be generated for you</li>
+          <li>• A secure Ethereum wallet will be generated for you</li>
           <li>• Your NFT Certificate of Authenticity will be minted</li>
           <li>• You'll receive wallet credentials and NFT details</li>
         </ul>
       </div>
-
-      {error && (
-        <div className="flex items-center space-x-2 p-3 bg-red-50 border border-red-200 rounded-lg">
-          <AlertCircle className="w-5 h-5 text-red-500" />
-          <span className="text-red-700">{error}</span>
-        </div>
-      )}
 
       <button
         onClick={handleClaimNFT}
@@ -326,7 +330,7 @@ const MavireClaimPortal = () => {
             <Wallet className="w-5 h-5" />
             <span>Your Wallet Details</span>
           </h3>
-          
+
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">Wallet Address</label>
@@ -350,7 +354,7 @@ const MavireClaimPortal = () => {
               <label className="block text-sm font-medium text-gray-700 mb-2">Private Key</label>
               <div className="flex items-center space-x-2">
                 <input
-                  type={showPrivateKey ? "text" : "password"}
+                  type={showPrivateKey ? 'text' : 'password'}
                   value={walletDetails.privateKey}
                   readOnly
                   className="flex-1 px-3 py-2 bg-white border border-gray-300 rounded-lg font-mono text-sm"
@@ -377,7 +381,9 @@ const MavireClaimPortal = () => {
                   value={walletDetails.mnemonic}
                   readOnly
                   rows={3}
-                  className={`flex-1 px-3 py-2 bg-white border border-gray-300 rounded-lg font-mono text-sm resize-none ${!showMnemonic ? 'filter blur-sm' : ''}`}
+                  className={`flex-1 px-3 py-2 bg-white border border-gray-300 rounded-lg font-mono text-sm resize-none ${
+                    !showMnemonic ? 'filter blur-sm' : ''
+                  }`}
                 />
                 <div className="flex flex-col space-y-2">
                   <button
@@ -438,11 +444,11 @@ const MavireClaimPortal = () => {
           {/* Header */}
           <div className="text-center mb-12">
             <div className="mb-6">
-              <img 
-                src="https://res.cloudinary.com/dd3cjiork/image/upload/v1754541227/Manvire_Codoir_W_-_LOGO_gycswo.png" 
-                alt="Mavire Codoir Logo" 
+              <img
+                src="https://res.cloudinary.com/dd3cjiork/image/upload/v1754541227/Manvire_Codoir_W_-_LOGO_gycswo.png"
+                alt="Mavire Codoir Logo"
                 className="h-20 mx-auto"
-                style={{filter: 'drop-shadow(0 4px 8px rgba(0,0,0,0.1))'}}
+                style={{ filter: 'drop-shadow(0 4px 8px rgba(0,0,0,0.1))' }}
               />
             </div>
             <p className="text-lg text-gray-600">NFT Certificate of Authenticity Portal</p>
@@ -451,26 +457,44 @@ const MavireClaimPortal = () => {
           {/* Progress Steps */}
           <div className="flex items-center justify-center mb-12">
             <div className="flex items-center space-x-8">
-              <div className={`flex items-center space-x-2 ${currentStep === 'verify' ? 'text-purple-600' : currentStep === 'confirmed' || currentStep === 'success' ? 'text-green-600' : 'text-gray-400'}`}>
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center ${currentStep === 'verify' ? 'bg-purple-600 text-white' : currentStep === 'confirmed' || currentStep === 'success' ? 'bg-green-600 text-white' : 'bg-gray-200'}`}>
+              <div
+                className={`flex items-center space-x-2 ${
+                  currentStep === 'verify' ? 'text-purple-600' : currentStep === 'confirmed' || currentStep === 'success' ? 'text-green-600' : 'text-gray-400'
+                }`}
+              >
+                <div
+                  className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                    currentStep === 'verify' ? 'bg-purple-600 text-white' : currentStep === 'confirmed' || currentStep === 'success' ? 'bg-green-600 text-white' : 'bg-gray-200'
+                  }`}
+                >
                   1
                 </div>
                 <span className="hidden sm:inline">Verify</span>
               </div>
-              
+
               <div className={`w-16 h-0.5 ${currentStep === 'confirmed' || currentStep === 'success' ? 'bg-green-600' : 'bg-gray-200'}`}></div>
-              
-              <div className={`flex items-center space-x-2 ${currentStep === 'confirmed' ? 'text-purple-600' : currentStep === 'success' ? 'text-green-600' : 'text-gray-400'}`}>
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center ${currentStep === 'confirmed' ? 'bg-purple-600 text-white' : currentStep === 'success' ? 'bg-green-600 text-white' : 'bg-gray-200'}`}>
+
+              <div
+                className={`flex items-center space-x-2 ${
+                  currentStep === 'confirmed' ? 'text-purple-600' : currentStep === 'success' ? 'text-green-600' : 'text-gray-400'
+                }`}
+              >
+                <div
+                  className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                    currentStep === 'confirmed' ? 'bg-purple-600 text-white' : currentStep === 'success' ? 'bg-green-600 text-white' : 'bg-gray-200'
+                  }`}
+                >
                   2
                 </div>
                 <span className="hidden sm:inline">Claim</span>
               </div>
-              
+
               <div className={`w-16 h-0.5 ${currentStep === 'success' ? 'bg-green-600' : 'bg-gray-200'}`}></div>
-              
+
               <div className={`flex items-center space-x-2 ${currentStep === 'success' ? 'text-green-600' : 'text-gray-400'}`}>
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center ${currentStep === 'success' ? 'bg-green-600 text-white' : 'bg-gray-200'}`}>
+                <div
+                  className={`w-8 h-8 rounded-full flex items-center justify-center ${currentStep === 'success' ? 'bg-green-600 text-white' : 'bg-gray-200'}`}
+                >
                   3
                 </div>
                 <span className="hidden sm:inline">Complete</span>
