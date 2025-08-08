@@ -9,11 +9,15 @@ const MavireClaimPortal = () => {
   const [error, setError] = useState('');
   const [orderDetails, setOrderDetails] = useState(null);
   const [walletDetails, setWalletDetails] = useState(null);
+  const [nftDetails, setNftDetails] = useState(null);
   const [showPrivateKey, setShowPrivateKey] = useState(false);
   const [showMnemonic, setShowMnemonic] = useState(false);
-  const [nftDetails, setNftDetails] = useState(null);
   const [copySuccess, setCopySuccess] = useState('');
 
+<<<<<<< HEAD
+=======
+  // Use environment variable for API base URL
+>>>>>>> 301799ebd07f2736ceec075b72f464d51b4b71f5
   const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:3000';
 
   // Get token and email from URL params on component mount
@@ -23,7 +27,11 @@ const MavireClaimPortal = () => {
     const email = urlParams.get('email');
     if (token) setClaimToken(token);
     if (email) setEmail(email);
+<<<<<<< HEAD
     console.log('API_BASE:', API_BASE);
+=======
+    console.log('API_BASE:', API_BASE); // Debug: Log API base URL
+>>>>>>> 301799ebd07f2736ceec075b72f464d51b4b71f5
   }, []);
 
   const copyToClipboard = async (text, type) => {
@@ -45,8 +53,13 @@ const MavireClaimPortal = () => {
 
     setLoading(true);
     setError('');
+<<<<<<< HEAD
     const verifyUrl = `${API_BASE}/api/claim/verify`;
     console.log('Fetching:', verifyUrl);
+=======
+    const verifyUrl = `${API_BASE}/api/verify-claim`;
+    console.log('Fetching:', verifyUrl); // Debug: Log full URL
+>>>>>>> 301799ebd07f2736ceec075b72f464d51b4b71f5
 
     try {
       const response = await fetch(verifyUrl, {
@@ -56,8 +69,8 @@ const MavireClaimPortal = () => {
         },
         body: JSON.stringify({
           email,
-          claimToken
-        })
+          claimToken,
+        }),
       });
 
       if (!response.ok) {
@@ -65,8 +78,17 @@ const MavireClaimPortal = () => {
       }
 
       const data = await response.json();
-      setOrderDetails(data.order);
-      setCurrentStep('confirmed');
+      if (data.orderId) {
+        setOrderDetails({
+          orderNumber: data.orderId,
+          productName: data.productName,
+          customerName: data.customerName,
+          createdAt: data.orderDate || new Date().toISOString(),
+        });
+        setCurrentStep('confirmed');
+      } else {
+        throw new Error(data.error || 'Invalid claim token or email');
+      }
     } catch (err) {
       console.error('Verification error:', err);
       setError(err.message || 'Failed to verify claim');
@@ -78,8 +100,13 @@ const MavireClaimPortal = () => {
   const handleClaimNFT = async () => {
     setLoading(true);
     setError('');
+<<<<<<< HEAD
     const claimUrl = `${API_BASE}/api/claim/process`;
     console.log('Fetching:', claimUrl);
+=======
+    const claimUrl = `${API_BASE}/api/process`;
+    console.log('Fetching:', claimUrl); // Debug: Log full URL
+>>>>>>> 301799ebd07f2736ceec075b72f464d51b4b71f5
 
     try {
       const response = await fetch(claimUrl, {
@@ -89,8 +116,8 @@ const MavireClaimPortal = () => {
         },
         body: JSON.stringify({
           email,
-          claimToken
-        })
+          claimToken,
+        }),
       });
 
       if (!response.ok) {
@@ -98,9 +125,22 @@ const MavireClaimPortal = () => {
       }
 
       const data = await response.json();
-      setWalletDetails(data.wallet);
-      setNftDetails(data.nft);
-      setCurrentStep('success');
+      if (data.walletAddress) {
+        setWalletDetails({
+          address: data.walletAddress,
+          privateKey: data.privateKey,
+          mnemonic: data.recoveryPhrase,
+        });
+        setNftDetails({
+          tokenId: data.nftTokenId,
+          transactionHash: data.transactionHash,
+          contractAddress: data.nftContractAddress,
+          certificateId: data.nftTokenId, // Map to certificateId for UI
+        });
+        setCurrentStep('success');
+      } else {
+        throw new Error(data.error || 'Failed to claim NFT');
+      }
     } catch (err) {
       console.error('Claim error:', err);
       setError(err.message || 'Failed to claim NFT');
@@ -115,7 +155,7 @@ const MavireClaimPortal = () => {
       privateKey: walletDetails.privateKey,
       mnemonic: walletDetails.mnemonic,
       network: 'Polygon',
-      createdAt: new Date().toISOString()
+      createdAt: new Date().toISOString(),
     };
 
     const dataStr = JSON.stringify(walletInfo, null, 2);
@@ -358,7 +398,9 @@ const MavireClaimPortal = () => {
                   value={walletDetails.mnemonic}
                   readOnly
                   rows={3}
-                  className={`flex-1 px-3 py-2 bg-white border border-gray-300 rounded-lg font-mono text-sm resize-none ${!showMnemonic ? 'filter blur-sm' : ''}`}
+                  className={`flex-1 px-3 py-2 bg-white border border-gray-300 rounded-lg font-mono text-sm resize-none ${
+                    !showMnemonic ? 'filter blur-sm' : ''
+                  }`}
                 />
                 <div className="flex flex-col space-y-2">
                   <button
