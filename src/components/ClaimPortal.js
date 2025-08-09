@@ -14,11 +14,9 @@ const MavireClaimPortal = () => {
   const [showMnemonic, setShowMnemonic] = useState(false);
   const [copySuccess, setCopySuccess] = useState('');
 
-<<<<<<< HEAD
-=======
-  // Use environment variable for API base URL
->>>>>>> 301799ebd07f2736ceec075b72f464d51b4b71f5
-  const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:3000';
+  // Use environment variable for API base URL - you'll need to set this in your .env file
+  // Example: REACT_APP_API_URL=https://your-mavire-minting-api.vercel.app
+  const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:3001';
 
   // Get token and email from URL params on component mount
   useEffect(() => {
@@ -27,12 +25,8 @@ const MavireClaimPortal = () => {
     const email = urlParams.get('email');
     if (token) setClaimToken(token);
     if (email) setEmail(email);
-<<<<<<< HEAD
-    console.log('API_BASE:', API_BASE);
-=======
     console.log('API_BASE:', API_BASE); // Debug: Log API base URL
->>>>>>> 301799ebd07f2736ceec075b72f464d51b4b71f5
-  }, []);
+  }, [API_BASE]);
 
   const copyToClipboard = async (text, type) => {
     try {
@@ -53,13 +47,9 @@ const MavireClaimPortal = () => {
 
     setLoading(true);
     setError('');
-<<<<<<< HEAD
+    // FIXED: Updated to correct API endpoint
     const verifyUrl = `${API_BASE}/api/claim/verify`;
-    console.log('Fetching:', verifyUrl);
-=======
-    const verifyUrl = `${API_BASE}/api/verify-claim`;
     console.log('Fetching:', verifyUrl); // Debug: Log full URL
->>>>>>> 301799ebd07f2736ceec075b72f464d51b4b71f5
 
     try {
       const response = await fetch(verifyUrl, {
@@ -100,13 +90,9 @@ const MavireClaimPortal = () => {
   const handleClaimNFT = async () => {
     setLoading(true);
     setError('');
-<<<<<<< HEAD
+    // FIXED: Updated to correct API endpoint
     const claimUrl = `${API_BASE}/api/claim/process`;
-    console.log('Fetching:', claimUrl);
-=======
-    const claimUrl = `${API_BASE}/api/process`;
     console.log('Fetching:', claimUrl); // Debug: Log full URL
->>>>>>> 301799ebd07f2736ceec075b72f464d51b4b71f5
 
     try {
       const response = await fetch(claimUrl, {
