@@ -1,336 +1,522 @@
 import React, { useState, useEffect } from 'react';
-import './ClaimPortal.js';
+import { Shield, Package, Wallet, CheckCircle, AlertCircle, Copy, Eye, EyeOff, Download, ExternalLink } from 'lucide-react';
 
-const ClaimPortal = () => {
-  const [claimInput, setClaimInput] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [verificationResult, setVerificationResult] = useState(null);
+const MavireClaimPortal = () => {
+  const [currentStep, setCurrentStep] = useState('verify');
+  const [claimToken, setClaimToken] = useState('');
+  const [email, setEmail] = useState('');
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [walletAddress, setWalletAddress] = useState('');
-  const [isWalletConnected, setIsWalletConnected] = useState(false);
-  const [claimHistory, setClaimHistory] = useState([]);
+  const [orderDetails, setOrderDetails] = useState(null);
+  const [walletDetails, setWalletDetails] = useState(null);
+  const [nftDetails, setNftDetails] = useState(null);
+  const [showPrivateKey, setShowPrivateKey] = useState(false);
+  const [showMnemonic, setShowMnemonic] = useState(false);
+  const [copySuccess, setCopySuccess] = useState('');
 
-  // Enhanced API configuration with better environment variable handling
-  const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001';
-  
-  // Log API configuration for debugging
-  console.log('🔧 API Configuration:', {
-    REACT_APP_API_URL: process.env.REACT_APP_API_URL,
-    API_BASE_URL: API_BASE_URL
-  });
+  // Use environment variable for API base URL - you'll need to set this in your .env file
+  // Example: REACT_APP_API_URL=https://your-mavire-minting-api.vercel.app
+  const API_BASE = process.env.REACT_APP_API_URL || 'http://localhost:3001';
 
+  // Get token and email from URL params on component mount
   useEffect(() => {
-    checkWalletConnection();
-    loadClaimHistory();
-  }, []);
+    const urlParams = new URLSearchParams(window.location.search);
+    const token = urlParams.get('token');
+    const email = urlParams.get('email');
+    if (token) setClaimToken(token);
+    if (email) setEmail(email);
+    console.log('API_BASE:', API_BASE); // Debug: Log API base URL
+  }, [API_BASE]);
 
-  const checkWalletConnection = async () => {
-    if (window.ethereum) {
-      try {
-        const accounts = await window.ethereum.request({ method: 'eth_accounts' });
-        if (accounts.length > 0) {
-          setWalletAddress(accounts[0]);
-          setIsWalletConnected(true);
-        }
-      } catch (error) {
-        console.error('Error checking wallet connection:', error);
-      }
-    }
-  };
-
-  const connectWallet = async () => {
-    if (window.ethereum) {
-      try {
-        const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
-        setWalletAddress(accounts[0]);
-        setIsWalletConnected(true);
-        setError('');
-      } catch (error) {
-        setError('Failed to connect wallet');
-        console.error('Error connecting wallet:', error);
-      }
-    } else {
-      setError('MetaMask not found. Please install MetaMask extension.');
-    }
-  };
-
-  // Enhanced verification function with detailed debugging
-  const verifyClaimOnChain = async (claimData) => {
+  const copyToClipboard = async (text, type) => {
     try {
-      setIsLoading(true);
-      setError('');
-      
-      // Log what we're sending for debugging
-      console.log('🔍 Sending verification request:', {
-        url: `${API_BASE_URL}/api/claim/verify`,
-        data: claimData
-      });
+      await navigator.clipboard.writeText(text);
+      setCopySuccess(type);
+      setTimeout(() => setCopySuccess(''), 2000);
+    } catch (err) {
+      console.error('Failed to copy:', err);
+      setError('Failed to copy to clipboard');
+    }
+  };
 
-      const response = await fetch(`${API_BASE_URL}/api/claim/verify`, {
+  const handleVerifyEmail = async () => {
+    if (!email || !claimToken) {
+      setError('Please provide both email and claim token');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+    // FIXED: Updated to correct API endpoint
+    const verifyUrl = `${API_BASE}/api/claim/verify`;
+    console.log('Fetching:', verifyUrl); // Debug: Log full URL
+
+    try {
+      const response = await fetch(verifyUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Accept': 'application/json',
         },
-        body: JSON.stringify(claimData),
+        body: JSON.stringify({
+          email,
+          claimToken,
+        }),
       });
 
-      // Log the full response for debugging
-      console.log('📨 API Response Status:', response.status);
-      console.log('📨 API Response Headers:', Object.fromEntries(response.headers.entries()));
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: Failed to verify claim`);
+      }
 
-      // Get response text first (might be error message)
-      const responseText = await response.text();
-      console.log('📨 Raw Response:', responseText);
+      const data = await response.json();
+      if (data.orderId) {
+        setOrderDetails({
+          orderNumber: data.orderId,
+          productName: data.productName,
+          customerName: data.customerName,
+          createdAt: data.orderDate || new Date().toISOString(),
+        });
+        setCurrentStep('confirmed');
+      } else {
+        throw new Error(data.error || 'Invalid claim token or email');
+      }
+    } catch (err) {
+      console.error('Verification error:', err);
+      setError(err.message || 'Failed to verify claim');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleClaimNFT = async () => {
+    setLoading(true);
+    setError('');
+    // FIXED: Updated to correct API endpoint
+    const claimUrl = `${API_BASE}/api/claim/process`;
+    console.log('Fetching:', claimUrl); // Debug: Log full URL
+
+    try {
+      const response = await fetch(claimUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email,
+          claimToken,
+        }),
+      });
 
       if (!response.ok) {
-        let errorMessage = `HTTP ${response.status}: `;
-        
-        try {
-          // Try to parse as JSON for structured error
-          const errorData = JSON.parse(responseText);
-          errorMessage += errorData.message || errorData.error || 'Failed to verify claim';
-          console.log('❌ Parsed Error:', errorData);
-        } catch (e) {
-          // If not JSON, use raw text
-          errorMessage += responseText || 'Failed to verify claim';
-        }
-        
-        throw new Error(errorMessage);
+        throw new Error(`HTTP ${response.status}: Failed to process NFT claim`);
       }
 
-      // Parse successful response
-      const data = JSON.parse(responseText);
-      console.log('✅ Verification Success:', data);
-      
-      return {
-        valid: data.valid,
-        metadata: data.metadata,
-        onChainData: data.onChainData
-      };
-      
-    } catch (error) {
-      console.error('❌ Verification error:', error);
-      throw error;
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const processClaim = async () => {
-    if (!claimInput.trim()) {
-      setError('Please enter a claim to verify');
-      return;
-    }
-
-    if (!isWalletConnected) {
-      setError('Please connect your wallet first');
-      return;
-    }
-
-    try {
-      const claimData = {
-        claim: claimInput.trim(),
-        userAddress: walletAddress,
-        timestamp: new Date().toISOString()
-      };
-
-      // Verify the claim
-      const verificationData = await verifyClaimOnChain(claimData);
-      
-      if (verificationData.valid) {
-        // Process successful verification
-        const processResponse = await fetch(`${API_BASE_URL}/api/claim/process`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            ...claimData,
-            verificationResult: verificationData
-          }),
+      const data = await response.json();
+      if (data.walletAddress) {
+        setWalletDetails({
+          address: data.walletAddress,
+          privateKey: data.privateKey,
+          mnemonic: data.recoveryPhrase,
         });
-
-        if (!processResponse.ok) {
-          const errorData = await processResponse.json();
-          throw new Error(errorData.message || 'Failed to process claim');
-        }
-
-        const processData = await processResponse.json();
-        
-        setVerificationResult({
-          success: true,
-          message: 'Claim verified and processed successfully!',
-          transactionHash: processData.transactionHash,
-          tokenId: processData.tokenId,
-          metadata: verificationData.metadata
+        setNftDetails({
+          tokenId: data.nftTokenId,
+          transactionHash: data.transactionHash,
+          contractAddress: data.nftContractAddress,
+          certificateId: data.nftTokenId, // Map to certificateId for UI
         });
-
-        // Add to claim history
-        const newClaim = {
-          id: Date.now(),
-          claim: claimInput,
-          status: 'verified',
-          timestamp: new Date().toISOString(),
-          transactionHash: processData.transactionHash,
-          tokenId: processData.tokenId
-        };
-        
-        setClaimHistory(prev => [newClaim, ...prev]);
-        localStorage.setItem('claimHistory', JSON.stringify([newClaim, ...claimHistory]));
-        
+        setCurrentStep('success');
       } else {
-        setVerificationResult({
-          success: false,
-          message: 'Claim could not be verified on-chain',
-          details: verificationData.metadata || {}
-        });
+        throw new Error(data.error || 'Failed to claim NFT');
       }
-
-      setClaimInput('');
-      
-    } catch (error) {
-      setError(error.message);
-      setVerificationResult(null);
-      console.error('Error processing claim:', error);
+    } catch (err) {
+      console.error('Claim error:', err);
+      setError(err.message || 'Failed to claim NFT');
+    } finally {
+      setLoading(false);
     }
   };
 
-  const loadClaimHistory = () => {
-    try {
-      const savedHistory = localStorage.getItem('claimHistory');
-      if (savedHistory) {
-        setClaimHistory(JSON.parse(savedHistory));
-      }
-    } catch (error) {
-      console.error('Error loading claim history:', error);
-    }
+  const downloadWalletInfo = () => {
+    const walletInfo = {
+      address: walletDetails.address,
+      privateKey: walletDetails.privateKey,
+      mnemonic: walletDetails.mnemonic,
+      network: 'Polygon',
+      createdAt: new Date().toISOString(),
+    };
+
+    const dataStr = JSON.stringify(walletInfo, null, 2);
+    const dataBlob = new Blob([dataStr], { type: 'application/json' });
+    const url = URL.createObjectURL(dataBlob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `mavire-wallet-${walletDetails.address.slice(0, 8)}.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
-  const clearHistory = () => {
-    setClaimHistory([]);
-    localStorage.removeItem('claimHistory');
-  };
-
-  return (
-    <div className="claim-portal">
-      <div className="portal-header">
-        <h1>🌟 MAVIRE Claim Portal</h1>
-        <p>Submit and verify your claims on the blockchain</p>
+  const renderVerificationStep = () => (
+    <div className="space-y-6">
+      <div className="text-center">
+        <div className="w-16 h-16 bg-gradient-to-br from-purple-500 to-blue-600 rounded-full flex items-center justify-center mx-auto mb-4">
+          <Shield className="w-8 h-8 text-white" />
+        </div>
+        <h2 className="text-2xl font-bold text-gray-900 mb-2">Verify Your Claim</h2>
+        <p className="text-gray-600">Enter your email and claim token to verify your NFT certificate eligibility</p>
       </div>
 
-      <div className="wallet-section">
-        {!isWalletConnected ? (
-          <button onClick={connectWallet} className="connect-wallet-btn">
-            🦊 Connect Wallet
-          </button>
-        ) : (
-          <div className="wallet-info">
-            <span className="wallet-status">✅ Connected</span>
-            <span className="wallet-address">
-              {walletAddress.slice(0, 6)}...{walletAddress.slice(-4)}
-            </span>
-          </div>
-        )}
-      </div>
-
-      <div className="claim-input-section">
-        <div className="input-group">
-          <label htmlFor="claim-input">Enter your claim:</label>
-          <textarea
-            id="claim-input"
-            value={claimInput}
-            onChange={(e) => setClaimInput(e.target.value)}
-            placeholder="Type your claim here..."
-            rows={4}
-            disabled={isLoading}
+      <div className="space-y-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Email Address</label>
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="your.email@example.com"
+            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition-all"
           />
         </div>
 
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Claim Token</label>
+          <input
+            type="text"
+            value={claimToken}
+            onChange={(e) => setClaimToken(e.target.value)}
+            placeholder="Enter your unique claim token"
+            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition-all"
+          />
+        </div>
+
+        {error && (
+          <div className="flex items-center space-x-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+            <AlertCircle className="w-5 h-5 text-red-500" />
+            <span className="text-red-700">{error}</span>
+          </div>
+        )}
+
         <button
-          onClick={processClaim}
-          disabled={isLoading || !isWalletConnected}
-          className="submit-claim-btn"
+          onClick={handleVerifyEmail}
+          disabled={loading || !email || !claimToken}
+          className="w-full bg-gradient-to-r from-purple-600 to-blue-600 text-white py-3 px-6 rounded-lg font-medium hover:from-purple-700 hover:to-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center justify-center space-x-2"
         >
-          {isLoading ? '⏳ Processing...' : '🚀 Submit & Verify Claim'}
+          {loading ? (
+            <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+          ) : (
+            <>
+              <Shield className="w-5 h-5" />
+              <span>Verify Claim</span>
+            </>
+          )}
         </button>
       </div>
+    </div>
+  );
 
-      {error && (
-        <div className="error-message">
-          <span className="error-icon">❌</span>
-          {error}
+  const renderConfirmationStep = () => (
+    <div className="space-y-6">
+      <div className="text-center">
+        <div className="w-16 h-16 bg-gradient-to-br from-green-500 to-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4">
+          <Package className="w-8 h-8 text-white" />
+        </div>
+        <h2 className="text-2xl font-bold text-gray-900 mb-2">Claim Verified!</h2>
+        <p className="text-gray-600">Your order details have been confirmed. Ready to mint your NFT certificate?</p>
+      </div>
+
+      {orderDetails && (
+        <div className="bg-gray-50 rounded-lg p-6 space-y-4">
+          <h3 className="font-semibold text-gray-900">Order Details</h3>
+          <div className="grid grid-cols-2 gap-4 text-sm">
+            <div>
+              <span className="text-gray-500">Order Number:</span>
+              <p className="font-medium">#{orderDetails.orderNumber}</p>
+            </div>
+            <div>
+              <span className="text-gray-500">Product:</span>
+              <p className="font-medium">{orderDetails.productName}</p>
+            </div>
+            <div>
+              <span className="text-gray-500">Customer:</span>
+              <p className="font-medium">{orderDetails.customerName}</p>
+            </div>
+            <div>
+              <span className="text-gray-500">Date:</span>
+              <p className="font-medium">{new Date(orderDetails.createdAt).toLocaleDateString()}</p>
+            </div>
+          </div>
         </div>
       )}
 
-      {verificationResult && (
-        <div className={`result-section ${verificationResult.success ? 'success' : 'failure'}`}>
-          <div className="result-header">
-            <span className="result-icon">
-              {verificationResult.success ? '✅' : '❌'}
-            </span>
-            <h3>{verificationResult.success ? 'Success!' : 'Verification Failed'}</h3>
-          </div>
-          
-          <p className="result-message">{verificationResult.message}</p>
-          
-          {verificationResult.success && (
-            <div className="success-details">
-              {verificationResult.transactionHash && (
-                <p><strong>Transaction:</strong> {verificationResult.transactionHash}</p>
-              )}
-              {verificationResult.tokenId && (
-                <p><strong>Token ID:</strong> {verificationResult.tokenId}</p>
-              )}
-            </div>
-          )}
-          
-          {verificationResult.details && (
-            <div className="failure-details">
-              <p><strong>Details:</strong></p>
-              <pre>{JSON.stringify(verificationResult.details, null, 2)}</pre>
-            </div>
-          )}
-        </div>
-      )}
+      <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+        <h4 className="font-medium text-purple-900 mb-2">What happens next?</h4>
+        <ul className="text-sm text-purple-700 space-y-1">
+          <li>• A secure Ethereum wallet will be generated for you</li>
+          <li>• Your NFT Certificate of Authenticity will be minted</li>
+          <li>• You'll receive wallet credentials and NFT details</li>
+        </ul>
+      </div>
 
-      {claimHistory.length > 0 && (
-        <div className="history-section">
-          <div className="history-header">
-            <h3>📜 Claim History</h3>
-            <button onClick={clearHistory} className="clear-history-btn">
-              Clear History
-            </button>
-          </div>
-          
-          <div className="history-list">
-            {claimHistory.map((claim) => (
-              <div key={claim.id} className="history-item">
-                <div className="claim-content">
-                  <p className="claim-text">{claim.claim}</p>
-                  <div className="claim-meta">
-                    <span className={`status ${claim.status}`}>{claim.status}</span>
-                    <span className="timestamp">
-                      {new Date(claim.timestamp).toLocaleString()}
-                    </span>
-                  </div>
-                </div>
-                {claim.transactionHash && (
-                  <div className="claim-details">
-                    <small>TX: {claim.transactionHash.slice(0, 10)}...</small>
-                    {claim.tokenId && <small>Token ID: {claim.tokenId}</small>}
-                  </div>
-                )}
+      <button
+        onClick={handleClaimNFT}
+        disabled={loading}
+        className="w-full bg-gradient-to-r from-green-600 to-emerald-600 text-white py-3 px-6 rounded-lg font-medium hover:from-green-700 hover:to-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200 flex items-center justify-center space-x-2"
+      >
+        {loading ? (
+          <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+        ) : (
+          <>
+            <Wallet className="w-5 h-5" />
+            <span>Claim My NFT Certificate</span>
+          </>
+        )}
+      </button>
+    </div>
+  );
+
+  const renderSuccessStep = () => (
+    <div className="space-y-6">
+      <div className="text-center">
+        <div className="w-16 h-16 bg-gradient-to-br from-green-500 to-emerald-600 rounded-full flex items-center justify-center mx-auto mb-4">
+          <CheckCircle className="w-8 h-8 text-white" />
+        </div>
+        <h2 className="text-2xl font-bold text-gray-900 mb-2">NFT Certificate Claimed!</h2>
+        <p className="text-gray-600">Your Certificate of Authenticity has been successfully minted on the blockchain</p>
+      </div>
+
+      {nftDetails && (
+        <div className="bg-gradient-to-r from-purple-50 to-blue-50 rounded-lg p-6">
+          <h3 className="font-semibold text-gray-900 mb-4">NFT Certificate Details</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+            <div>
+              <span className="text-gray-500">Token ID:</span>
+              <p className="font-mono font-medium">{nftDetails.tokenId}</p>
+            </div>
+            <div>
+              <span className="text-gray-500">Transaction Hash:</span>
+              <div className="flex items-center space-x-2">
+                <p className="font-mono font-medium truncate">{nftDetails.transactionHash}</p>
+                <button
+                  onClick={() => copyToClipboard(nftDetails.transactionHash, 'tx')}
+                  className="text-purple-600 hover:text-purple-700"
+                >
+                  <Copy className="w-4 h-4" />
+                </button>
               </div>
-            ))}
+            </div>
+            <div>
+              <span className="text-gray-500">Network:</span>
+              <p className="font-medium">Polygon</p>
+            </div>
+            <div>
+              <span className="text-gray-500">Certificate ID:</span>
+              <p className="font-mono font-medium">{nftDetails.certificateId}</p>
+            </div>
+          </div>
+          <div className="mt-4">
+            <a
+              href={`https://polygonscan.com/tx/${nftDetails.transactionHash}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center space-x-2 text-purple-600 hover:text-purple-700 font-medium"
+            >
+              <ExternalLink className="w-4 h-4" />
+              <span>View on PolygonScan</span>
+            </a>
           </div>
         </div>
       )}
+
+      {walletDetails && (
+        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-6">
+          <h3 className="font-semibold text-gray-900 mb-4 flex items-center space-x-2">
+            <Wallet className="w-5 h-5" />
+            <span>Your Wallet Details</span>
+          </h3>
+
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Wallet Address</label>
+              <div className="flex items-center space-x-2">
+                <input
+                  type="text"
+                  value={walletDetails.address}
+                  readOnly
+                  className="flex-1 px-3 py-2 bg-white border border-gray-300 rounded-lg font-mono text-sm"
+                />
+                <button
+                  onClick={() => copyToClipboard(walletDetails.address, 'address')}
+                  className="p-2 text-purple-600 hover:text-purple-700"
+                >
+                  <Copy className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Private Key</label>
+              <div className="flex items-center space-x-2">
+                <input
+                  type={showPrivateKey ? 'text' : 'password'}
+                  value={walletDetails.privateKey}
+                  readOnly
+                  className="flex-1 px-3 py-2 bg-white border border-gray-300 rounded-lg font-mono text-sm"
+                />
+                <button
+                  onClick={() => setShowPrivateKey(!showPrivateKey)}
+                  className="p-2 text-gray-600 hover:text-gray-700"
+                >
+                  {showPrivateKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+                <button
+                  onClick={() => copyToClipboard(walletDetails.privateKey, 'privateKey')}
+                  className="p-2 text-purple-600 hover:text-purple-700"
+                >
+                  <Copy className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Recovery Phrase</label>
+              <div className="flex items-center space-x-2">
+                <textarea
+                  value={walletDetails.mnemonic}
+                  readOnly
+                  rows={3}
+                  className={`flex-1 px-3 py-2 bg-white border border-gray-300 rounded-lg font-mono text-sm resize-none ${
+                    !showMnemonic ? 'filter blur-sm' : ''
+                  }`}
+                />
+                <div className="flex flex-col space-y-2">
+                  <button
+                    onClick={() => setShowMnemonic(!showMnemonic)}
+                    className="p-2 text-gray-600 hover:text-gray-700"
+                  >
+                    {showMnemonic ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                  <button
+                    onClick={() => copyToClipboard(walletDetails.mnemonic, 'mnemonic')}
+                    className="p-2 text-purple-600 hover:text-purple-700"
+                  >
+                    <Copy className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {copySuccess && (
+              <div className="text-sm text-green-600 font-medium">
+                ✓ {copySuccess === 'address' ? 'Address' : copySuccess === 'privateKey' ? 'Private key' : copySuccess === 'mnemonic' ? 'Recovery phrase' : 'Transaction hash'} copied!
+              </div>
+            )}
+          </div>
+
+          <div className="mt-6 p-4 bg-amber-50 border border-amber-200 rounded-lg">
+            <p className="text-sm text-amber-800">
+              <strong>Important:</strong> Save these wallet details securely. This information cannot be recovered if lost.
+            </p>
+          </div>
+
+          <button
+            onClick={downloadWalletInfo}
+            className="mt-4 w-full bg-gray-600 text-white py-2 px-4 rounded-lg font-medium hover:bg-gray-700 transition-colors flex items-center justify-center space-x-2"
+          >
+            <Download className="w-4 h-4" />
+            <span>Download Wallet Details</span>
+          </button>
+        </div>
+      )}
+
+      <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+        <h4 className="font-medium text-green-900 mb-2">What's Next?</h4>
+        <ul className="text-sm text-green-700 space-y-1">
+          <li>• Your NFT certificate is now permanently stored on the blockchain</li>
+          <li>• Use your wallet to view and manage your NFT collection</li>
+          <li>• Keep your wallet details safe for future access</li>
+          <li>• Your certificate serves as proof of authenticity for your Mavire product</li>
+        </ul>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-purple-50 via-blue-50 to-indigo-100">
+      <div className="container mx-auto px-4 py-12">
+        <div className="max-w-2xl mx-auto">
+          <div className="text-center mb-12">
+            <div className="mb-6">
+              <img
+                src="https://res.cloudinary.com/dd3cjiork/image/upload/v1754541227/Manvire_Codoir_W_-_LOGO_gycswo.png"
+                alt="Mavire Codoir Logo"
+                className="h-20 mx-auto"
+                style={{ filter: 'drop-shadow(0 4px 8px rgba(0,0,0,0.1))' }}
+              />
+            </div>
+            <p className="text-lg text-gray-600">NFT Certificate of Authenticity Portal</p>
+          </div>
+
+          <div className="flex items-center justify-center mb-12">
+            <div className="flex items-center space-x-8">
+              <div
+                className={`flex items-center space-x-2 ${
+                  currentStep === 'verify' ? 'text-purple-600' : currentStep === 'confirmed' || currentStep === 'success' ? 'text-green-600' : 'text-gray-400'
+                }`}
+              >
+                <div
+                  className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                    currentStep === 'verify' ? 'bg-purple-600 text-white' : currentStep === 'confirmed' || currentStep === 'success' ? 'bg-green-600 text-white' : 'bg-gray-200'
+                  }`}
+                >
+                  1
+                </div>
+                <span className="hidden sm:inline">Verify</span>
+              </div>
+
+              <div className={`w-16 h-0.5 ${currentStep === 'confirmed' || currentStep === 'success' ? 'bg-green-600' : 'bg-gray-200'}`}></div>
+
+              <div
+                className={`flex items-center space-x-2 ${
+                  currentStep === 'confirmed' ? 'text-purple-600' : currentStep === 'success' ? 'text-green-600' : 'text-gray-400'
+                }`}
+              >
+                <div
+                  className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                    currentStep === 'confirmed' ? 'bg-purple-600 text-white' : currentStep === 'success' ? 'bg-green-600 text-white' : 'bg-gray-200'
+                  }`}
+                >
+                  2
+                </div>
+                <span className="hidden sm:inline">Claim</span>
+              </div>
+
+              <div className={`w-16 h-0.5 ${currentStep === 'success' ? 'bg-green-600' : 'bg-gray-200'}`}></div>
+
+              <div className={`flex items-center space-x-2 ${currentStep === 'success' ? 'text-green-600' : 'text-gray-400'}`}>
+                <div
+                  className={`w-8 h-8 rounded-full flex items-center justify-center ${currentStep === 'success' ? 'bg-green-600 text-white' : 'bg-gray-200'}`}
+                >
+                  3
+                </div>
+                <span className="hidden sm:inline">Complete</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-2xl shadow-xl p-8">
+            {currentStep === 'verify' && renderVerificationStep()}
+            {currentStep === 'confirmed' && renderConfirmationStep()}
+            {currentStep === 'success' && renderSuccessStep()}
+          </div>
+
+          <div className="text-center mt-8 text-gray-500 text-sm">
+            <p>Powered by blockchain technology • Secured by Polygon Network</p>
+            <p className="mt-2">© 2025 Mavire Codoir. All rights reserved.</p>
+          </div>
+        </div>
+      </div>
     </div>
   );
 };
 
-export default ClaimPortal;
-
-
-
+export default MavireClaimPortal;
