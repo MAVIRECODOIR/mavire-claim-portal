@@ -3,11 +3,17 @@ import React, { useState } from 'react';
 // 🔧 API Configuration - Your NFT minting API
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://mavire-minting-api.vercel.app';
 
-// Generate a valid UUID v4
+// Generate a valid UUID v4 (more robust version)
 const generateUUID = () => {
+  // Use crypto.randomUUID if available (modern browsers)
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  
+  // Fallback: More precise UUID v4 generation
   return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
-    const r = Math.random() * 16 | 0;
-    const v = c === 'x' ? r : (r & 0x3 | 0x8);
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
     return v.toString(16);
   });
 };
@@ -41,16 +47,33 @@ const ClaimPortal = () => {
       environment: process.env.NODE_ENV
     });
 
-    const testClaimToken = claimData.claimToken || generateUUID(); // Generate valid UUID if not provided
+    // Generate or use provided claim token
+    let requestData;
+    
+    if (claimData.claimToken.trim()) {
+      // User provided a claim token - use it as-is
+      requestData = {
+        email: claimData.email,
+        claimToken: claimData.claimToken.trim()
+      };
+      console.log('🎫 Using provided claim token');
+    } else {
+      // No claim token provided - check email eligibility only
+      requestData = {
+        email: claimData.email
+        // No claimToken field - backend will check email for eligible orders
+      };
+      console.log('📧 Checking email eligibility without claim token');
+    }
     
     // 🔍 Debug: Show what we're sending
     console.log('🔍 Sending claim verification request:', {
       url: `${API_BASE_URL}/api/claim/verify`,
       method: 'POST',
-      data: { email: claimData.email, claimToken: testClaimToken },
-      dataString: JSON.stringify({ email: claimData.email, claimToken: testClaimToken }, null, 2),
-      hasClaimToken: !!claimData.claimToken,
-      generatedToken: !claimData.claimToken
+      data: requestData,
+      dataString: JSON.stringify(requestData, null, 2),
+      hasClaimToken: !!claimData.claimToken.trim(),
+      requestType: claimData.claimToken.trim() ? 'specific claim verification' : 'email eligibility check'
     });
 
     try {
@@ -59,10 +82,7 @@ const ClaimPortal = () => {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ 
-          email: claimData.email,
-          claimToken: testClaimToken
-        })
+        body: JSON.stringify(requestData)
       });
 
       // 📨 Debug: Show response details
@@ -229,7 +249,8 @@ const ClaimPortal = () => {
             placeholder="Enter your claim token or leave blank to check eligibility"
           />
           <small style={{color: '#666', fontSize: '14px', marginTop: '5px', display: 'block'}}>
-            💡 If you have a claim token from your email, enter it above. Otherwise, we'll check if your email has eligible orders.
+            💡 <strong>With claim token:</strong> Verifies specific claim from your email<br/>
+            💡 <strong>Without claim token:</strong> Checks if your email has any eligible orders
           </small>
         </div>
 
