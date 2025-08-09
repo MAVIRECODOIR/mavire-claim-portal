@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import './ClaimPortal.css';
+import './ClaimPortal.js';
 
 const ClaimPortal = () => {
   const [claimInput, setClaimInput] = useState('');
