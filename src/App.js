@@ -1,11 +1,10 @@
 import React from 'react';
-import ClaimPortal from './components/ClaimPortal';
-import './App.css';
+import MavireClaimPortal from './components/ClaimPortal';
 
 function App() {
   return (
     <div className="App">
-      <ClaimPortal />
+      <MavireClaimPortal />
     </div>
   );
 }
