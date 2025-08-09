@@ -3,14 +3,19 @@ import React, { useState } from 'react';
 // 🔧 API Configuration - Your NFT minting API
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://mavire-minting-api.vercel.app';
 
+// Generate a valid UUID v4
+const generateUUID = () => {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    const r = Math.random() * 16 | 0;
+    const v = c === 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+};
+
 const ClaimPortal = () => {
   const [claimData, setClaimData] = useState({
-    purchaseDate: '',
-    serialNumber: '',
-    issueDescription: '',
-    customerName: '',
     email: '',
-    phone: ''
+    claimToken: '' // User can enter their claim token, or we'll test without it
   });
 
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -36,12 +41,16 @@ const ClaimPortal = () => {
       environment: process.env.NODE_ENV
     });
 
+    const testClaimToken = claimData.claimToken || generateUUID(); // Generate valid UUID if not provided
+    
     // 🔍 Debug: Show what we're sending
     console.log('🔍 Sending claim verification request:', {
       url: `${API_BASE_URL}/api/claim/verify`,
       method: 'POST',
-      data: { email: claimData.email, claimToken: 'test-token' },
-      dataString: JSON.stringify({ email: claimData.email, claimToken: 'test-token' }, null, 2)
+      data: { email: claimData.email, claimToken: testClaimToken },
+      dataString: JSON.stringify({ email: claimData.email, claimToken: testClaimToken }, null, 2),
+      hasClaimToken: !!claimData.claimToken,
+      generatedToken: !claimData.claimToken
     });
 
     try {
@@ -52,7 +61,7 @@ const ClaimPortal = () => {
         },
         body: JSON.stringify({ 
           email: claimData.email,
-          claimToken: 'test-token' // For testing - in real app this would come from URL or user input
+          claimToken: testClaimToken
         })
       });
 
@@ -195,20 +204,7 @@ const ClaimPortal = () => {
 
       <form onSubmit={handleSubmit}>
         <div style={styles.formGroup}>
-          <label htmlFor="customerName" style={styles.label}>Customer Name:</label>
-          <input
-            type="text"
-            id="customerName"
-            name="customerName"
-            value={claimData.customerName}
-            onChange={handleInputChange}
-            required
-            style={styles.input}
-          />
-        </div>
-
-        <div style={styles.formGroup}>
-          <label htmlFor="email" style={styles.label}>Email:</label>
+          <label htmlFor="email" style={styles.label}>Email Address:</label>
           <input
             type="email"
             id="email"
@@ -217,58 +213,24 @@ const ClaimPortal = () => {
             onChange={handleInputChange}
             required
             style={styles.input}
+            placeholder="Enter your email address"
           />
         </div>
 
         <div style={styles.formGroup}>
-          <label htmlFor="phone" style={styles.label}>Phone:</label>
-          <input
-            type="tel"
-            id="phone"
-            name="phone"
-            value={claimData.phone}
-            onChange={handleInputChange}
-            style={styles.input}
-          />
-        </div>
-
-        <div style={styles.formGroup}>
-          <label htmlFor="purchaseDate" style={styles.label}>Purchase Date:</label>
-          <input
-            type="date"
-            id="purchaseDate"
-            name="purchaseDate"
-            value={claimData.purchaseDate}
-            onChange={handleInputChange}
-            required
-            style={styles.input}
-          />
-        </div>
-
-        <div style={styles.formGroup}>
-          <label htmlFor="serialNumber" style={styles.label}>Serial Number:</label>
+          <label htmlFor="claimToken" style={styles.label}>Claim Token (Optional):</label>
           <input
             type="text"
-            id="serialNumber"
-            name="serialNumber"
-            value={claimData.serialNumber}
+            id="claimToken"
+            name="claimToken"
+            value={claimData.claimToken}
             onChange={handleInputChange}
-            required
             style={styles.input}
+            placeholder="Enter your claim token or leave blank to check eligibility"
           />
-        </div>
-
-        <div style={styles.formGroup}>
-          <label htmlFor="issueDescription" style={styles.label}>Issue Description:</label>
-          <textarea
-            id="issueDescription"
-            name="issueDescription"
-            value={claimData.issueDescription}
-            onChange={handleInputChange}
-            rows={4}
-            required
-            style={styles.textarea}
-          />
+          <small style={{color: '#666', fontSize: '14px', marginTop: '5px', display: 'block'}}>
+            💡 If you have a claim token from your email, enter it above. Otherwise, we'll check if your email has eligible orders.
+          </small>
         </div>
 
         <button 
