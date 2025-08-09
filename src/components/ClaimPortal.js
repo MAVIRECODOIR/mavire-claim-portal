@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 
-// 🔧 API Configuration - Change this to your other repo's URL
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:3001';
+// 🔧 API Configuration - Your NFT minting API
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://mavire-minting-api.vercel.app';
 
 const ClaimPortal = () => {
   const [claimData, setClaimData] = useState({
@@ -37,21 +37,23 @@ const ClaimPortal = () => {
     });
 
     // 🔍 Debug: Show what we're sending
-    console.log('🔍 Sending verification request:', {
-      url: `${API_BASE_URL}/api/claims/submit`,
+    console.log('🔍 Sending claim verification request:', {
+      url: `${API_BASE_URL}/api/claim/verify`,
       method: 'POST',
-      data: claimData,
-      dataString: JSON.stringify(claimData, null, 2)
+      data: { email: claimData.email, claimToken: 'test-token' },
+      dataString: JSON.stringify({ email: claimData.email, claimToken: 'test-token' }, null, 2)
     });
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/claims/submit`, {
+      const response = await fetch(`${API_BASE_URL}/api/claim/verify`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          // Add any other headers your backend might need
         },
-        body: JSON.stringify(claimData)
+        body: JSON.stringify({ 
+          email: claimData.email,
+          claimToken: 'test-token' // For testing - in real app this would come from URL or user input
+        })
       });
 
       // 📨 Debug: Show response details
@@ -74,18 +76,10 @@ const ClaimPortal = () => {
       }
 
       if (response.ok) {
-        setSubmitStatus('✅ Claim submitted successfully!');
+        setSubmitStatus('✅ Claim verified successfully! This email is eligible for NFT claim.');
         console.log('✅ Success:', responseData);
         
-        // Reset form on success
-        setClaimData({
-          purchaseDate: '',
-          serialNumber: '',
-          issueDescription: '',
-          customerName: '',
-          email: '',
-          phone: ''
-        });
+        // Don't reset form - let user see the successful verification
       } else {
         // 📨 Debug: Show error details
         console.log('❌ HTTP Error Response:', {
@@ -190,12 +184,12 @@ const ClaimPortal = () => {
 
   return (
     <div style={styles.container}>
-      <h2 style={styles.title}>Warranty Claim Portal</h2>
+      <h2 style={styles.title}>NFT Claim Verification Portal</h2>
       
       {/* 🔧 Debug Info Display */}
       <div style={styles.debugBox}>
         <strong>🔧 Debug Info:</strong><br/>
-        API URL: {API_BASE_URL}/api/claims/submit<br/>
+        API URL: {API_BASE_URL}/api/claim/verify<br/>
         Environment: {process.env.NODE_ENV || 'development'}
       </div>
 
@@ -282,7 +276,7 @@ const ClaimPortal = () => {
           disabled={isSubmitting}
           style={styles.button}
         >
-          {isSubmitting ? 'Submitting...' : 'Submit Claim'}
+          {isSubmitting ? 'Verifying...' : 'Verify Claim Eligibility'}
         </button>
 
         {submitStatus && (
